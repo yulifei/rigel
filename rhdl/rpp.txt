@@ -1,0 +1,75 @@
+//TENSOR METHOD
+
+
+// I am using these types very loosley. 'n' and 'd/dims' are integers. 'a','b','c' are arbitrary types
+
+// n-dimensional Tensor of type A. 
+//t = Type.Tensor([2,3,4,5],float)
+//t.n == 4
+//sizeof(t) == 2*3*4*5*sizeof(float)
+Tensor(n,a)
+
+//Stencil increases dimensions by d. d0,d1... are the amout to expend in the respective dimesion
+stencil :: Tensor(n,a) -> [d0,d1...] -> Tensor(n+d,a)
+
+// Normal Map
+map :: dims -> (a->b) -> Tensor(n,a) -> Tensor(n,a)
+
+// Fold (Reduce) The top 'dims' dimensions.
+fold :: dims -> (a->a->b) -> Tensor(n,a) -> Tensor((n-dims),b)
+
+//Create a Tensor of Tuples
+zip :: Tensor(n,a) -> Tensor(n,b) -> Tensor(n,(a,b))
+
+//Map over a tuple by passing in two tensors
+mapZip :: dims -> ((a,b)->c) -> Tensor(n,a) -> Tensor(n,b) -> Tensor(n,c)
+mapZip d f a b = map d f (zip a b)
+
+
+//How to do a convolution
+var W,H = 100,100
+var channels = 3
+var numFilters = 5
+var k = 3
+
+Var input : Tensor(3,float,[H,W,channels]) = load(...)
+Var filters : Tensor(4,float,[numFukters,k,k,channels]) = load(...)
+
+//Do a map over the full W and H
+convolveLam = L(pix,filter) -> fold(3,+,mapZip(3,*,Stencil(pix,[3,3]),filter))
+oneFilterLam = L(filter) -> map(2,convolveLam,input,filter)
+out: Tensor(float,3,[H,W,numFilters]) = map(1,oneFilterLam,filters)
+
+
+
+
+
+
+
+
+
+// EASIER LANGUAGE
+
+//do Pyrimid
+
+Lambda convolve(arrA:Array2D ,arrB:Arayy2D) {
+  multMap = map('*',arrA,arrB)
+  convolve = fold('+',multMap)
+}
+
+Lambda blur(img:Array2D,kx:Array2D,ky:Array2D) {
+  stencil1 = Stencil(img,1,3)
+  blurx = convolve(stencil1,kx)
+  stencil2 = Stencil(blurx,3,1)
+  blur = convolve(stencil2,blury)
+}
+
+Lambda pyrimid(img,kx,ky) {
+  py1 = downsample(blur(kx,ky,img),2,2)
+  py2 = downsample(blur(kx,ky,py1),2,2)
+  py3 = downsample(blur(kx,ky,py2),2,2)
+}
+
+
+
+
