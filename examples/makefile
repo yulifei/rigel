@@ -249,6 +249,21 @@ out/%.axi.bit: out/build_%/system.twr
 	  -g Match_cycle:Auto -g Security:None -g ICAP_select:Auto -g DonePipe:Yes -g DriveDone:No system.ncd > OUT_bitgen.txt
 	cp out/build_$*/system.bit $@
 
+out/%.vivado.bit: out/%.axi.v
+	mkdir -p out/vivado_$*
+	cd out/vivado_$*; echo "read_verilog ../$*.axi.v" > system.tcl
+	cd out/vivado_$*; echo "read_xdc ../../../platform/axi/zedboard_master_XDC_RevC_D_v3.xdc" >> system.tcl
+	cd out/vivado_$*; echo "read_xdc ../../../platform/axi/ps7_constraints.xdc" >> system.tcl
+	cd out/vivado_$*; echo "synth_design -top stage -part xc7z020clg484-1" >> system.tcl
+	cd out/vivado_$*; echo "opt_design" >> system.tcl
+	cd out/vivado_$*; echo "place_design" >> system.tcl
+	cd out/vivado_$*; echo "phys_opt_design" >> system.tcl
+	cd out/vivado_$*; echo "route_design" >> system.tcl
+	cd out/vivado_$*; echo "write_bitstream -force system.bit" >> system.tcl
+	cd out/vivado_$*; echo "report_timing" >> system.tcl
+	cd out/vivado_$*; echo "report_timing_summary" >> system.tcl
+	cd out/vivado_$*; vivado -mode batch -source 'system.tcl' -nojournal -log 'vivado.log' > /dev/null
+	cp out/vivado_$*/system.bit $@
 
 out/%.camera.bit: out/%.axi.v
 	mkdir -p out/buildcamera_$*
@@ -400,6 +415,33 @@ out/%.axi.raw: out/%.axi.bit out/%.hz.txt out/%.metadata.lua
 	# keep copy for future reference
 	cp out/$*.axi.cycles.txt out/build_$*
 
+out/%.vivado_hz.txt: out/%.vivado.bit
+# 	$(eval $@_HZl := $(shell grep Maximum out/build_$*/OUT_trce.txt  | grep -P -o "[0-9.]+" | tail -1 | tr -d '\n' | awk '{print $$1" * 1000000"}' | bc -l | xargs printf "%d"))
+# 	echo $($@_HZl) > out/$*.vivado_hz.txt
+	echo 100000000 > out/$*.vivado_hz.txt
+
+out/%.vivado.raw: out/%.vivado.bit out/%.vivado_hz.txt out/%.metadata.lua
+	$(eval $@_IMG := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua inputImage))
+	$(eval $@_SCALEN := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua scaleN))
+	$(eval $@_SCALED := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua scaleD))
+	$(eval $@_BPP_IN := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua inputBytesPerPixel))
+	$(eval $@_BPP_OUT := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua outputBytesPerPixel))
+	$(eval $@_OUTW := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua outputWidth))
+	$(eval $@_OUTH := $(shell $(LUA) ../misc/extractMetadata.lua out/$*.metadata.lua outputHeight))
+# ###### SET THE CLOCK	
+	$(eval $@_HZ := $(shell cat out/$*.vivado_hz.txt))
+	- sshpass -p 'root' ssh root@$(ZYNQ_ADDR) "echo 'fclk0' > /sys/devices/amba.0/f8007000.ps7-dev-cfg/fclk_export"
+	sshpass -p 'root' ssh root@$(ZYNQ_ADDR) "echo '$($@_HZ)' > /sys/class/fclk/fclk0/set_rate"
+	sshpass -p 'root' ssh root@$(ZYNQ_ADDR) "cat /sys/class/fclk/fclk0/set_rate" > out/$*.realhz.txt
+# ###### CLOCK STUFF END
+	sshpass -p 'root' scp ../platform/axi/processimage out/$*.vivado.bit $($@_IMG) root@$(ZYNQ_ADDR):$(ZYNQ_WRITE_PATH)
+	sshpass -p 'root' ssh root@$(ZYNQ_ADDR) "cat $(ZYNQ_WRITE_PATH)/$*.vivado.bit > /dev/xdevcfg"
+	sshpass -p 'root' ssh root@$(ZYNQ_ADDR) "$(ZYNQ_WRITE_PATH)/processimage 805339136 $(ZYNQ_WRITE_PATH)/$($@_IMG) $(ZYNQ_WRITE_PATH)/out.raw $($@_SCALEN) $($@_SCALED) $($@_BPP_IN) $($@_BPP_OUT) $($@_OUTW) $($@_OUTH)"
+	sshpass -p 'root' scp root@$(ZYNQ_ADDR):$(ZYNQ_WRITE_PATH)/out.raw out/$*.vivado.raw
+	sshpass -p 'root' ssh root@$(ZYNQ_ADDR) "rm $(ZYNQ_WRITE_PATH)/processimage $(ZYNQ_WRITE_PATH)/$($@_IMG) $(ZYNQ_WRITE_PATH)/out.raw $(ZYNQ_WRITE_PATH)/$*.vivado.bit"
+	$(TERRA) ../misc/extractCycles.t out/$*.vivado.raw > out/$*.vivado.cycles.txt
+	# keep copy for future reference
+	cp out/$*.vivado.cycles.txt out/build_$*
 
 ZYNQ_100_WRITE_PATH=/tmp
 ZYNQ_100_ADDR=192.168.1.10
