@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <stdbool.h>
+//#include <cacheflush.h>
 
 void usage(void) {
 	printf("*argv[0] -g <GPIO_ADDRESS> -i|-o <VALUE>\n");
@@ -75,6 +76,7 @@ int saveImage(char* filename,  volatile void* address, int numbytes){
   fclose(outfile);
 }
 
+
 int main(int argc, char *argv[]) {
 	unsigned gpio_addr = 0x70000000;
 	unsigned copy_addr = atoi(argv[1]);
@@ -134,8 +136,10 @@ int main(int argc, char *argv[]) {
   printf("LENIN %d\n",lenIn);
   assert(lenOut % (8*16) == 0);
 
+  int CACHESWEEP = 64;
+
   printf("mapping %08x\n",copy_addr);
-  void * ptr = mmap(NULL, lenIn+lenOut, PROT_READ|PROT_WRITE, MAP_SHARED, fd, copy_addr);
+  volatile void * ptr = mmap(NULL, lenIn+lenOut+page_size*CACHESWEEP, PROT_READ|PROT_WRITE, MAP_SHARED, fd, copy_addr);
   if(ptr==(void *) -1){
     printf("Error mmaping\n");
     exit(1);
@@ -146,11 +150,13 @@ int main(int argc, char *argv[]) {
   // zero out the output region
   for(int i=0; i<lenOut; i++){ *(unsigned char*)(ptr+lenIn+i)=0; }
 
+  //for(int i=0; i<page_size*CACHESWEEP; i++){ *(unsigned char*)(ptr+lenIn+lenOut+i)=i+1; }
+  sleep(2);
 
   // mmap the device into memory 
   // This mmaps the control region (the MMIO for the control registers).
   // Image data is located at addr 'copy_addr'
-  void * gpioptr = mmap(NULL, page_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, gpio_addr);
+  volatile void * gpioptr = mmap(NULL, page_size+page_size*CACHESWEEP, PROT_READ|PROT_WRITE, MAP_SHARED, fd, gpio_addr);
   if(gpioptr==(void *) -1){
     printf("Error mmaping gpio\n");
     exit(1);
@@ -162,15 +168,14 @@ int main(int argc, char *argv[]) {
   volatile Conf * conf = (Conf*) gpioptr;
 
   conf->src = copy_addr;
-  conf->dest = copy_addr + lenIn;
-  conf->len = lenIn;
-
-  // HACK: poking cmd causes the pipeline to start. sleep for 2sec to make sure the above registers set before starting.
-  sleep(2);
-  conf->cmd = 3;
+  //conf->dest = copy_addr + lenIn;
+  //conf->len = lenIn;
+  //conf->cmd = 3;
 
   //usleep(10000);
   sleep(2); // this sleep needs to be 2 for the z100, but 1 for the z20
+
+  //for(int i=0; i<page_size*CACHESWEEP; i++){ *(unsigned char*)(ptr+lenIn+lenOut+i)=i+3; }
 
   saveImage(argv[3],ptr+lenIn,lenOut);
 

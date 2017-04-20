@@ -185,7 +185,7 @@ always @(posedge ACLK) begin
         v_state <= IDLE;
     else case(v_state)
         IDLE:
-            if (LITE_WVALID && LITE_WREADY && w_select_r == 2'b00)
+            if (LITE_WVALID && LITE_WREADY && w_select_r == 2'b01)
                 v_state <= RWAIT;
         RWAIT:
             if (CONFIG_READY)

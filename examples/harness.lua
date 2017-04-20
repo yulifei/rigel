@@ -30,6 +30,7 @@ local function expectedCycles(hsfn,inputCount,outputCount,underflowTest,slackPer
 
   local EC_RAW = inputCount*(hsfn.sdfInput[1][2]/hsfn.sdfInput[1][1])
   EC_RAW = math.ceil(EC_RAW)
+  print("ECRAW",EC_RAW,hsfn.sdfInput[1][2],hsfn.sdfInput[1][1])
 
   if DARKROOM_VERBOSE then print("Expected cycles:",EC_RAW,"IC",inputCount,hsfn.sdfInput[1][1],hsfn.sdfInput[1][2]) end
 
@@ -117,6 +118,7 @@ local function harnessAxi( hsfn, inputCount, outputCount, underflowTest, inputTy
   end
 
   local EC = expectedCycles(hsfn,inputCount,outputCount,underflowTest,1.85)
+  print("EC",EC,inputCount,outputCount)
   if type(earlyOverride)=="number" then EC=earlyOverride end
   local inpdata = R.apply("underflow_US", RM.underflow( R.extractData(inputType), inputBytes/8, EC, true ), inpdata)
 
@@ -137,7 +139,7 @@ local function harnessAxi( hsfn, inputCount, outputCount, underflowTest, inputTy
   local EXTRA_FIFO = true
 
   if EXTRA_FIFO then
-      regs = {R.instantiateRegistered("f1",RM.fifo(R.extractData(hsfn.inputType),256))}
+      regs = {R.instantiateRegistered("f1",RM.fifo(R.extractData(hsfn.inputType),2048))}
       stats[2] = R.applyMethod("s1",regs[1],"store",hsfninp)
       hsfninp = R.applyMethod("l1",regs[1],"load")
   end
@@ -145,7 +147,7 @@ local function harnessAxi( hsfn, inputCount, outputCount, underflowTest, inputTy
   local pipelineOut = R.apply("hsfna",hsfn,hsfninp)
 
   if EXTRA_FIFO then
-     regs[2] = R.instantiateRegistered("f2",RM.fifo(R.extractData(hsfn.outputType),256))
+     regs[2] = R.instantiateRegistered("f2",RM.fifo(R.extractData(hsfn.outputType),2048))
      out = R.applyMethod("l2",regs[2],"load")
      stats[3] = R.applyMethod("s2",regs[2],"store",pipelineOut)
   else

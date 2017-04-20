@@ -1,38 +1,3 @@
-//-----------------------------------------------------------------------------
-// system.v
-//-----------------------------------------------------------------------------
-
-// The axi bus expects the number of valid data items to exactly match the # of addresses we send.
-// This module checks for underflow (too few valid data items). If there are too few, it inserts DEADBEEFs to make it correct.
-// lengthOutput is in bytes
-module UnderflowShim(input CLK, input RST, input [31:0] lengthOutput, input [63:0] inp, input inp_valid, output [63:0] out, output out_valid);
-   parameter WAIT_CYCLES = 2048;
-   
-   reg [31:0] outCnt;
-   reg [31:0] outLen;
-
-   reg        fixupMode;
-   reg [31:0]  outClks = 0;
-   
-   
-   always@(posedge CLK) begin
-     if (RST) begin 
-        outCnt <= 32'd0;
-        outLen <= lengthOutput;
-        fixupMode <= 1'b0;
-        outClks <= 32'd0;
-     end else begin
-        outClks <= outClks + 32'd1;
-        
-        if(inp_valid || fixupMode) begin outCnt <= outCnt+32'd8; end // AXI does 8 bytes per clock
-        if(outClks > WAIT_CYCLES) begin fixupMode <= 1'b1; end
-     end
-   end
-
-   assign out = (fixupMode)?(64'hDEAD):(inp);
-   assign out_valid = (RST)?(1'b0):((fixupMode)?(outCnt<outLen):(inp_valid));
-endmodule
-
 module stage
   (
     inout [53:0] MIO,
@@ -164,23 +129,12 @@ module stage
     .CONFIG_LEN(CONFIG_LEN),
     .CONFIG_IRQ(CONFIG_IRQ));
 
-   // lengthInput/lengthOutput are in bytes
-   wire [31:0] lengthInput;
-   assign lengthInput = {4'b0000,CONFIG_LEN[27:0]};
-   wire [31:0] lengthOutput;
-   assign lengthOutput = (CONFIG_LEN[27:0] << 8'd8) >> CONFIG_LEN[31:28];
-
    reg [31:0]  clkcnt = 0;
-//   assign LED = clkcnt[20:13];
+
    assign  LED = clkcnt[28:21];
    
   always @(posedge FCLK0) begin
-//    if(ARESETN == 0)
-//        LED <= 0;
-//    else if(CONFIG_VALID)
-//        LED <= {CONFIG_CMD[1:0],CONFIG_SRC[2:0],CONFIG_DEST[2:0]};
      clkcnt <= clkcnt+1;
-
   end
 
   wire [63:0] pipelineInput;
@@ -199,8 +153,6 @@ module stage
     
   ___PIPELINE_MODULE_NAME  #(.INPUT_COUNT(___PIPELINE_INPUT_COUNT),.OUTPUT_COUNT(___PIPELINE_OUTPUT_COUNT)) pipeline(.CLK(FCLK0),.reset(CONFIG_READY),.ready(pipelineReady),.ready_downstream(downstreamReady),.process_input({pipelineInputValid,___PIPELINE_INPUT}),.process_output(pipelineOutputPacked));
 
-//   UnderflowShim #(.WAIT_CYCLES(___PIPELINE_WAIT_CYCLES)) OS(.CLK(FCLK0),.RST(CONFIG_READY),.lengthOutput(lengthOutput),.inp(pipelineOutputPacked[63:0]),.inp_valid(pipelineOutputPacked[64]),.out(pipelineOutput),.out_valid(pipelineOutputValid));
-   
   DRAMReader reader(
     .ACLK(FCLK0),
     .ARESETN(ARESETN),
@@ -248,7 +200,7 @@ module stage
     
     .CONFIG_VALID(CONFIG_VALID),
     .CONFIG_READY(WRITER_READY),
-    .CONFIG_START_ADDR(CONFIG_DEST),
+    .CONFIG_START_ADDR(CONFIG_SRC+32'd___PIPELINE_INPUT_BYTES),
     .CONFIG_NBYTES(___PIPELINE_OUTPUT_BYTES),
 
     .DATA_READY(downstreamReady),

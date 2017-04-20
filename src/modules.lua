@@ -1821,7 +1821,7 @@ modules.fifo = memoize(function( A, size, nostall, W, H, T, csimOnly, X )
   if csimOnly then
     res.systolicModule = fpgamodules.fifonoop(A)
   else
-    res.systolicModule = Ssugar.moduleConstructor("fifo_SIZE"..size.."_"..tostring(A).."_W"..tostring(W).."_H"..tostring(H).."_T"..tostring(T).."_BYTES"..tostring(bytes))
+    res.systolicModule = Ssugar.moduleConstructor("fifo_SIZE"..size.."_"..tostring(A).."_W"..tostring(W).."_H"..tostring(H).."_T"..tostring(T).."_BYTES"..tostring(bytes).."_NOSTALL"..tostring(nostall))
 
     local fifo = res.systolicModule:add( fpgamodules.fifo(A,size,DARKROOM_VERBOSE):instantiate("FIFO") )
 
